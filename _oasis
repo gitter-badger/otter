@@ -1,0 +1,19 @@
+OASISFormat: 0.4
+Name:        otter
+Version:     0.1
+Synopsis:    OCaml Twitter API
+Authors:     Runhang Li, Dominic Price
+License:     MIT
+
+AlphaFeatures: ocamlbuild_more_args
+XOCamlbuildExtraArgs: -j 4 -verbose 0 -tag thread -tag debug -tag annot -tag bin_annot -tag short_paths -lflags -cclib,-lsodium
+
+Library otter
+  Path:       lib
+  BuildTools: ocamlbuild
+  Modules: Otter
+  BuildDepends: lwt,core,cryptokit,cohttp,uri
+  CompiledObject: best
+  Install: false
+
+  

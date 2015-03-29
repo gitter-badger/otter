@@ -1,0 +1,24 @@
+# OASIS_START
+# DO NOT EDIT (digest: b79ba8a4dca5c781b36c573828d16088)
+# Ignore VCS directories, you can use the same kind of rule outside
+# OASIS_START/STOP if you want to exclude directories that contains
+# useless stuff for the build process
+true: annot, bin_annot
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+# Library otter
+"lib/otter.cmxs": use_otter
+<lib/*.ml{,i,y}>: pkg_cohttp
+<lib/*.ml{,i,y}>: pkg_core
+<lib/*.ml{,i,y}>: pkg_cryptokit
+<lib/*.ml{,i,y}>: pkg_lwt
+<lib/*.ml{,i,y}>: pkg_uri
+# OASIS_STOP
