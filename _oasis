@@ -8,11 +8,11 @@ License:     MIT
 AlphaFeatures: ocamlbuild_more_args
 XOCamlbuildExtraArgs: -j 4 -verbose 0 -tag thread -tag debug -tag annot -tag bin_annot -tag short_paths -lflags -cclib,-lsodium
 
-Library otter
+Executable otter
   Path:       lib
   BuildTools: ocamlbuild
-  Modules: Otter
-  BuildDepends: lwt,core,cryptokit,cohttp,uri
+  MainIs:     otter.ml
+  BuildDepends: lwt,core,cryptokit,cohttp,cohttp.lwt,uri
   CompiledObject: best
   Install: false
 

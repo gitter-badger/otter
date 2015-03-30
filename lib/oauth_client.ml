@@ -16,7 +16,6 @@
  *)
 
 open Core_kernel.Std
-open Cryptokit
 open Lwt
 
 module type CLOCK = sig
@@ -24,7 +23,7 @@ module type CLOCK = sig
 end
 
 module type RANDOM = sig
-  val get_nonce : int -> string
+  val get_nonce : unit -> string
 end
 
 module type HMAC_SHA1 = sig
@@ -39,13 +38,18 @@ module Clock : CLOCK = struct
 end
 
 module Random : RANDOM = struct
+  open Cryptokit
   (* as suggested in Crypokit *)
   let prng = Random.pseudo_rng (Random.string Random.secure_rng 20)
 
-  let get_nonce len = Random.string prng len
+  let get_nonce () = 
+    let forbid = Re_posix.compile_pat "[^0-9a-zA-Z]" in
+    let s = Random.string prng 40 |> Cohttp.Base64.encode in
+    Re.replace_string forbid ~by:"" s
 end
 
 module HMAC_SHA1 : HMAC_SHA1 = struct
+  open Cryptokit
   type t = Cryptokit.hash
 
   let init = MAC.hmac_sha1
@@ -80,7 +84,8 @@ module type OAuth_Client = sig
   type temporary_credentials = {
     consumer_key : string;
     consumer_secret : string;
-    credentials: credentials;
+    token : string;
+    token_secret : string;
     callback_confirmed : bool;
     authorization_uri : Uri.t
   }
@@ -89,7 +94,8 @@ module type OAuth_Client = sig
   type token_credentials = {
     consumer_key : string;
     consumer_secret : string;
-    credentials: credentials;
+    token : string;
+    token_secret : string;
   }
   
   (** [fetch_request_token], given [request_uri] *)
@@ -102,6 +108,7 @@ module type OAuth_Client = sig
       unit ->
       (temporary_credentials, error) Result.t Lwt.t
   
+  (*
   val fetch_access_token :
       access_uri : Uri.t ->
       request_token : string ->
@@ -124,7 +131,7 @@ module type OAuth_Client = sig
       access_token : string ->
       unit ->
       (string, error) Result.t Lwt.t
-  
+  *)
 end
 
 module type SIGNATURE = sig
@@ -159,7 +166,7 @@ module Util = struct
     Buffer.contents dst
 end
 
-module Signature   
+module Make_Signature   
   (Clock: CLOCK) 
   (Random: RANDOM)
   (HMAC_SHA1: HMAC_SHA1): SIGNATURE = struct
@@ -178,7 +185,7 @@ module Signature
     (* RFC 5849 section 3.1 *)
     let oauth_params = [
       "oauth_consumer_key", consumer_key;
-      "oauth_nonce", Random.get_nonce 32;
+      "oauth_nonce", Random.get_nonce ();
       "oauth_signature_method", "HMAC-SHA1";
       "oauth_timestamp", Clock.get_timestamp ();
       "oauth_version", "1.0" 
@@ -248,7 +255,8 @@ module Make_OAuth_Client
   type temporary_credentials = {
     consumer_key : string;
     consumer_secret : string;
-    credentials: credentials;
+    token : string;
+    token_secret : string;
     callback_confirmed : bool;
     authorization_uri : Uri.t
   }
@@ -256,8 +264,62 @@ module Make_OAuth_Client
   type token_credentials = {
     consumer_key : string;
     consumer_secret : string;
-    credentials: credentials;
+    token : string;
+    token_secret : string;
   }
 
   exception Authorization_failed of int * string
+
+  module Sign = Make_Signature(Clock)(Random)(HMAC_SHA1)
+  module Code = Cohttp.Code
+  module Body = Cohttp_lwt_body
+  module Header = Cohttp.Header
+  module Response = Client.Response
+
+  let fetch_request_token
+    ?callback:(callback: Uri.t option)
+    ~request_uri
+    ~authorization_uri
+    ~consumer_key
+    ~consumer_secret
+    () =
+    print_endline "gott!";
+    let header = Sign.add_signature
+      ?callback
+      ~consumer_key: consumer_key
+      ~consumer_secret: consumer_secret
+      ~request_method: `POST
+      ~uri: request_uri
+      (Header.init_with "Content-Type" "application/x-www-form-urlencoded")
+    in
+    print_endline "gott!";
+    Client.post ~headers:header request_uri >>= (fun (resp, body) ->
+      print_endline (Sexp.to_string (Cohttp_lwt_unix.Response.sexp_of_t resp));
+    (match Response.status resp with
+      | `Code c -> c
+      | status -> Code.code_of_status status) |> 
+    (function
+      | 200 -> Body.to_string body >>= fun body_s ->
+         let find key = 
+           List.Assoc.find_exn (Uri.query_of_encoded body_s) key |> List.hd_exn in
+         return (
+           let token = find "oauth_token" in
+           try
+             Ok ({
+               consumer_key = consumer_key;
+               consumer_secret = consumer_secret;
+               token = token;
+               token_secret = 
+                 find "oauth_token_secret";
+               callback_confirmed = 
+                 find "oauth_callback_confirmed" |> Bool.of_string;
+               authorization_uri = 
+                 Uri.add_query_param' authorization_uri ("oauth_token", token);
+             })
+           with _ as e -> Error(Exception e))
+      | c -> Body.to_string body >>= fun b -> 
+        return (Error(HttpResponse (c, b)))))
+
+
+
 end

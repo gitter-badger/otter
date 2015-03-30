@@ -17,6 +17,24 @@
 
 open Core_kernel.Std
 
+module type CLOCK = sig
+  val get_timestamp : unit -> string
+end
+
+module type RANDOM = sig
+  val get_nonce : unit -> string
+end
+
+module type HMAC_SHA1 = sig
+  type t
+  val init : string -> t
+  val add_string: t -> string -> t
+  val result : t -> string
+end
+
+module Clock : CLOCK
+module Random : RANDOM
+module HMAC_SHA1 : HMAC_SHA1
 
 (** Interface of OAuth v1.0 client *)
 module type OAuth_Client = sig
@@ -40,20 +58,20 @@ module type OAuth_Client = sig
   (** [credentials] are a pair of a token and a matching shared secret *)
   type credentials = token * shared_secret
 
-  (** Temporary credentials *)
   type temporary_credentials = {
     consumer_key : string;
     consumer_secret : string;
-    credentials: credentials;
+    token : string;
+    token_secret : string;
     callback_confirmed : bool;
     authorization_uri : Uri.t
   }
   
-  (** Token credentials *)
   type token_credentials = {
     consumer_key : string;
     consumer_secret : string;
-    credentials: credentials;
+    token : string;
+    token_secret : string;
   }
   
   (** [fetch_request_token], given [request_uri] *)
@@ -65,7 +83,7 @@ module type OAuth_Client = sig
       consumer_secret : string ->
       unit ->
       (temporary_credentials, error) Result.t Lwt.t
-  
+  (*
   val fetch_access_token :
       access_uri : Uri.t ->
       request_token : string ->
@@ -88,5 +106,11 @@ module type OAuth_Client = sig
       access_token : string ->
       unit ->
       (string, error) Result.t Lwt.t
-  
+  *)
 end
+
+module Make_OAuth_Client 
+  (Clock: CLOCK) 
+  (Random: RANDOM)
+  (HMAC_SHA1: HMAC_SHA1)
+  (Client: Cohttp_lwt.Client) : OAuth_Client
