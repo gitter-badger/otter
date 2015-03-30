@@ -12,7 +12,7 @@ Executable otter
   Path:       lib
   BuildTools: ocamlbuild
   MainIs:     otter.ml
-  BuildDepends: lwt,core,cryptokit,cohttp,cohttp.lwt,uri
+  BuildDepends: lwt,core,cryptokit,cohttp,cohttp.lwt,uri,re
   CompiledObject: best
   Install: false
 
