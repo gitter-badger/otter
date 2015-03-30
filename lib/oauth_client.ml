@@ -15,24 +15,16 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
+open Core_kernel.Std
 open Cryptokit
+open Lwt
 
 module type CLOCK = sig
   val get_timestamp : unit -> string
 end
 
 module type RANDOM = sig
-  val get_nonce : unit -> string
-end
-
-module Clock : CLOCK = struct
-  let get_timestamp () = Unix.gettimeofday () |> int_of_float |> string_of_int
-end
-
-module Random : RANDOM = struct
-  let prng = Random.pseudo_rng (Random.string Random.secure_rng 20)
-
-  let get_nonce () = Random.string prng 16
+  val get_nonce : int -> string
 end
 
 module type HMAC_SHA1 = sig
@@ -40,6 +32,17 @@ module type HMAC_SHA1 = sig
   val init : string -> t
   val add_string: t -> string -> t
   val result : t -> string
+end
+
+module Clock : CLOCK = struct
+  let get_timestamp () = Unix.gettimeofday () |> Int.of_float |> string_of_int
+end
+
+module Random : RANDOM = struct
+  (* as suggested in Crypokit *)
+  let prng = Random.pseudo_rng (Random.string Random.secure_rng 20)
+
+  let get_nonce len = Random.string prng len
 end
 
 module HMAC_SHA1 : HMAC_SHA1 = struct
@@ -50,4 +53,211 @@ module HMAC_SHA1 : HMAC_SHA1 = struct
   let add_string hash s = hash#add_string s; hash
 
   let result hash = hash#result
+end
+
+module type OAuth_Client = sig
+  
+  (** Type of HTTP reponse error *)
+  type error = 
+    | HttpResponse of int * string (** HTTP response code *)
+    | Exception of exn (** HTTP Exception *)
+
+  (** [token] is a unique identifier issued by the server and
+      used by the client to associate authenticated requests with
+      the resource owner whose authorization is requested or
+      has been obtained by the client *)
+  type token = string
+
+  (** [shared_secret], along with the {!token}, will be used
+      by the client to establish its ownership of the {!token},
+      and its authority to represent the resource owner *)
+  type shared_secret = string
+  
+  (** [credentials] are a pair of a token and a matching shared secret *)
+  type credentials = token * shared_secret
+
+  (** Temporary credentials *)
+  type temporary_credentials = {
+    consumer_key : string;
+    consumer_secret : string;
+    credentials: credentials;
+    callback_confirmed : bool;
+    authorization_uri : Uri.t
+  }
+  
+  (** Token credentials *)
+  type token_credentials = {
+    consumer_key : string;
+    consumer_secret : string;
+    credentials: credentials;
+  }
+  
+  (** [fetch_request_token], given [request_uri] *)
+  val fetch_request_token : 
+      ?callback : Uri.t ->
+      request_uri : Uri.t ->
+      authorization_uri : Uri.t ->
+      consumer_key : string ->
+      consumer_secret : string ->
+      unit ->
+      (temporary_credentials, error) Result.t Lwt.t
+  
+  val fetch_access_token :
+      access_uri : Uri.t ->
+      request_token : string ->
+      verifier : string ->
+      (token_credentials, error) Result.t Lwt.t
+      
+  val do_get_request :
+      ?uri_parameters : (string * string) list ->
+      ?expect : Cohttp.Code.status_code ->
+      uri : Uri.t ->
+      access_token : string ->
+      unit ->
+      (string, error) Result.t Lwt.t
+      
+  val do_post_request :
+      ?uri_parameters : (string * string) list ->
+      ?body_parameters : (string * string) list ->
+      ?expect : Cohttp.Code.status_code ->
+      uri : Uri.t ->
+      access_token : string ->
+      unit ->
+      (string, error) Result.t Lwt.t
+  
+end
+
+module type SIGNATURE = sig
+  val add_signature : 
+    ?body_parameters : (string * string) list ->
+    ?callback : Uri.t  ->
+    ?token : string ->
+    ?token_secret : string ->
+    consumer_key : string ->
+    consumer_secret : string ->
+    request_method : [ | `POST | `GET ] ->
+    uri : Uri.t ->
+    Cohttp.Header.t ->
+    Cohttp.Header.t
+end
+
+module Util = struct
+  let pct_encode src = 
+    let dst = String.length src |> Buffer.create in
+    String.iter ~f:(function 
+      | c when 
+        (c >= '0' && c <= '9') 
+        || (c >= 'A' && c <= 'Z')
+        || (c >= 'a' && c <= 'z')
+        || c = '-'
+        || c = '.'
+        || c = '_'
+        || c = '~' -> Buffer.add_char dst c
+      | c -> Char.to_int c |>
+        Printf.sprintf "%%%02X" |>
+        Buffer.add_string dst) src; 
+    Buffer.contents dst
+end
+
+module Signature   
+  (Clock: CLOCK) 
+  (Random: RANDOM)
+  (HMAC_SHA1: HMAC_SHA1): SIGNATURE = struct
+  
+  let add_signature
+    ?body_parameters: (parameters: (string * string) list = [])
+    ?callback: (callback: Uri.t option)
+    ?token: (token: string option)
+    ?token_secret: (token_secret: string = "")
+    ~consumer_key: consumer_key
+    ~consumer_secret: consumer_secret
+    ~request_method: (request_method: [ | `POST | `GET ])
+    ~uri: uri
+    headers = 
+
+    (* RFC 5849 section 3.1 *)
+    let oauth_params = [
+      "oauth_consumer_key", consumer_key;
+      "oauth_nonce", Random.get_nonce 32;
+      "oauth_signature_method", "HMAC-SHA1";
+      "oauth_timestamp", Clock.get_timestamp ();
+      "oauth_version", "1.0" 
+      ]
+      |> List.append (match callback with
+          | Some callback -> ["oauth_callback", Uri.to_string callback]
+          | None -> []) 
+      |> List.append (match token with
+          | Some token -> ["oauth_token", token]
+          | None -> []) 
+    in
+    let uri_without_query = List.fold_left ~init:uri 
+        ~f:(fun acc (e, _) -> Uri.remove_query_param acc e) (Uri.query uri) 
+    in
+    let (|+) = HMAC_SHA1.add_string in
+    let hmac = (Util.pct_encode consumer_secret) ^ 
+      "&" ^ (Util.pct_encode token_secret) |>
+      HMAC_SHA1.init |+
+      (match request_method with `POST -> "POST&" | `GET -> "GET&") |+
+      (Uri.to_string uri_without_query |> Util.pct_encode) |+ "&" |>
+      fun hmac -> 
+        let quries = Uri.query uri in
+        let fold_f acc (k, vs) =
+          match (List.hd vs) with
+          | None -> List.append acc [k, ""]
+          | _ -> List.map vs ~f:(fun v -> (k, v)) |> List.append acc in
+        List.fold quries ~init:parameters ~f:fold_f |>
+        List.append oauth_params |>
+        List.map ~f:(fun (k, v) -> (Util.pct_encode k, Util.pct_encode v)) |>
+        (* fix bug: values should be compared when keys are the same *)
+        List.sort ~cmp:(fun kv1 kv2 -> compare kv1 kv2) |> 
+        List.foldi ~init:hmac ~f:(fun i hmac (key, value) ->
+          hmac |+
+          (match i with | 0 -> "" | _ -> Util.pct_encode "&") |+
+          key |+ (Util.pct_encode "=") |+ value)
+    in
+    let buf = Buffer.create 16 in
+    let buf_add = Buffer.add_string buf in
+    buf_add "OAuth oauth_signature=\"";
+    HMAC_SHA1.result hmac |> Cohttp.Base64.encode |> Util.pct_encode |> buf_add;
+    buf_add "\"";
+    List.iter ~f:(fun (key, value) ->
+        buf_add ",";
+        buf_add key;
+        buf_add "=\"";
+        buf_add value;
+        buf_add "\"";     
+      ) oauth_params;
+    Cohttp.Header.add headers "Authorization" (Buffer.contents buf)
+
+end
+
+module Make_OAuth_Client 
+  (Clock: CLOCK) 
+  (Random: RANDOM)
+  (HMAC_SHA1: HMAC_SHA1)
+  (Client: Cohttp_lwt.Client) : OAuth_Client = struct
+
+  type error =
+    | HttpResponse of int * string
+    | Exception of exn
+
+  type token = string
+  type shared_secret = string
+  type credentials = token * shared_secret
+
+  type temporary_credentials = {
+    consumer_key : string;
+    consumer_secret : string;
+    credentials: credentials;
+    callback_confirmed : bool;
+    authorization_uri : Uri.t
+  }
+  
+  type token_credentials = {
+    consumer_key : string;
+    consumer_secret : string;
+    credentials: credentials;
+  }
+
+  exception Authorization_failed of int * string
 end
