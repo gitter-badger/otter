@@ -23,7 +23,8 @@ setup.bin
 # RFC files
 *.pdf
 
-otter.ml
+*otter.ml
+
 *.txt
 
 *.swp
