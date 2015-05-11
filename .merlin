@@ -1,0 +1,14 @@
+B _build/*
+
+EXT lwt
+
+S lib/
+
+PKG lwt
+PKG core
+PKG cryptokit
+PKG cohttp
+PKG cohttp.lwt
+PKG uri
+PKG re 
+PKG base64

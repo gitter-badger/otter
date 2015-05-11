@@ -18,6 +18,12 @@ _build/
 # oasis generated files
 setup.data
 setup.log
+setup.bin
 
 # RFC files
 *.pdf
+
+otter.ml
+*.txt
+
+*.swp

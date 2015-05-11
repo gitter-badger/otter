@@ -36,44 +36,43 @@ module Clock : CLOCK
 module Random : RANDOM
 module HMAC_SHA1 : HMAC_SHA1
 
+(** credential is a pair of a token and a matching shared secret
+      
+    Token is a unique identifier issued by the server and
+    used by the client to associate authenticated requests with
+    the resource owner whose authorization is requested or
+    has been obtained by the client
+
+    Shared secret, along with the token, will be used
+    by the client to establish its ownership of the token,
+    and its authority to represent the resource owner *)
+
+type temporary_credentials = {
+  consumer_key : string;
+  consumer_secret : string;
+  token : string;
+  token_secret : string;
+  callback_confirmed : bool;
+  authorization_uri : Uri.t
+}
+  
+type token_credentials = {
+  consumer_key : string;
+  consumer_secret : string;
+  token : string;
+  token_secret : string;
+}
+
 (** Interface of OAuth v1.0 client *)
-module type OAuth_Client = sig
+module type OAuth_client = sig
   
   (** Type of HTTP reponse error *)
   type error = 
     | HttpResponse of int * string (** HTTP response code *)
     | Exception of exn (** HTTP Exception *)
 
-  (** [token] is a unique identifier issued by the server and
-      used by the client to associate authenticated requests with
-      the resource owner whose authorization is requested or
-      has been obtained by the client *)
-  type token = string
+  val print_authorization_uri : temporary_credentials -> unit
 
-  (** [shared_secret], along with the {!token}, will be used
-      by the client to establish its ownership of the {!token},
-      and its authority to represent the resource owner *)
-  type shared_secret = string
-  
-  (** [credentials] are a pair of a token and a matching shared secret *)
-  type credentials = token * shared_secret
-
-  type temporary_credentials = {
-    consumer_key : string;
-    consumer_secret : string;
-    token : string;
-    token_secret : string;
-    callback_confirmed : bool;
-    authorization_uri : Uri.t
-  }
-  
-  type token_credentials = {
-    consumer_key : string;
-    consumer_secret : string;
-    token : string;
-    token_secret : string;
-  }
-  
   (** [fetch_request_token], given [request_uri] *)
   val fetch_request_token : 
       ?callback : Uri.t ->
@@ -83,34 +82,37 @@ module type OAuth_Client = sig
       consumer_secret : string ->
       unit ->
       (temporary_credentials, error) Result.t Lwt.t
-  (*
+  
   val fetch_access_token :
       access_uri : Uri.t ->
-      request_token : string ->
+      request_token : temporary_credentials ->
       verifier : string ->
+      unit ->
       (token_credentials, error) Result.t Lwt.t
-      
+  
   val do_get_request :
       ?uri_parameters : (string * string) list ->
       ?expect : Cohttp.Code.status_code ->
       uri : Uri.t ->
-      access_token : string ->
+      access_token : token_credentials ->
       unit ->
       (string, error) Result.t Lwt.t
-      
+
   val do_post_request :
       ?uri_parameters : (string * string) list ->
       ?body_parameters : (string * string) list ->
       ?expect : Cohttp.Code.status_code ->
       uri : Uri.t ->
-      access_token : string ->
+      access_token : token_credentials ->
       unit ->
       (string, error) Result.t Lwt.t
-  *)
 end
 
-module Make_OAuth_Client 
+
+module Make_OAuth_client 
   (Clock: CLOCK) 
   (Random: RANDOM)
   (HMAC_SHA1: HMAC_SHA1)
-  (Client: Cohttp_lwt.Client) : OAuth_Client
+  (Client: Cohttp_lwt.Client) : OAuth_client
+
+include OAuth_client

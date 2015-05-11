@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 6593dce1bdc5cdafdf0c470d84fa354d)
+# DO NOT EDIT (digest: 5c94cb7b1f08637fe19d4e9e3c84c155)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -15,18 +15,24 @@ true: annot, bin_annot
 "_darcs": -traverse
 "_darcs": not_hygienic
 # Executable otter
+<lib/otter.{native,byte}>: pkg_base64
 <lib/otter.{native,byte}>: pkg_cohttp
 <lib/otter.{native,byte}>: pkg_cohttp.lwt
-<lib/otter.{native,byte}>: pkg_core
+<lib/otter.{native,byte}>: pkg_core_kernel
 <lib/otter.{native,byte}>: pkg_cryptokit
 <lib/otter.{native,byte}>: pkg_lwt
+<lib/otter.{native,byte}>: pkg_ppx_deriving.show
+<lib/otter.{native,byte}>: pkg_ppx_deriving_yojson
 <lib/otter.{native,byte}>: pkg_re
 <lib/otter.{native,byte}>: pkg_uri
+<lib/*.ml{,i,y}>: pkg_base64
 <lib/*.ml{,i,y}>: pkg_cohttp
 <lib/*.ml{,i,y}>: pkg_cohttp.lwt
-<lib/*.ml{,i,y}>: pkg_core
+<lib/*.ml{,i,y}>: pkg_core_kernel
 <lib/*.ml{,i,y}>: pkg_cryptokit
 <lib/*.ml{,i,y}>: pkg_lwt
+<lib/*.ml{,i,y}>: pkg_ppx_deriving.show
+<lib/*.ml{,i,y}>: pkg_ppx_deriving_yojson
 <lib/*.ml{,i,y}>: pkg_re
 <lib/*.ml{,i,y}>: pkg_uri
 # OASIS_STOP
