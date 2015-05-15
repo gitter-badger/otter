@@ -14,6 +14,9 @@ setup.data: setup.bin
 build: setup.data setup.bin
 	./setup.bin -build -classic-display
 
+test: setup.bin build
+	./setup.bin -test
+
 install: setup.bin
 	./setup.bin -install
 

@@ -3,6 +3,10 @@ B _build/*
 EXT lwt
 
 S lib/
+S unix/
+S xen/
+S lib_test/
+S bin/
 
 PKG lwt
 PKG core

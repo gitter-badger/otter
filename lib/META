@@ -1,0 +1,23 @@
+# OASIS_START
+# DO NOT EDIT (digest: daaccd8e72631769a718c7c094c4573b)
+version = "0.1"
+description = "OCaml Twitter API"
+requires =
+"lwt core_kernel cryptokit cohttp cohttp.lwt uri re cohttp base64 ppx_deriving.show ppx_deriving_yojson"
+archive(byte) = "otter.cma"
+archive(byte, plugin) = "otter.cma"
+archive(native) = "otter.cmxa"
+archive(native, plugin) = "otter.cmxs"
+exists_if = "otter.cma"
+package "unix_lwt" (
+ version = "0.1"
+ description = "OCaml Twitter API"
+ requires = "otter core_kernel"
+ archive(byte) = "otter_unix_lwt.cma"
+ archive(byte, plugin) = "otter_unix_lwt.cma"
+ archive(native) = "otter_unix_lwt.cmxa"
+ archive(native, plugin) = "otter_unix_lwt.cmxs"
+ exists_if = "otter_unix_lwt.cma"
+)
+# OASIS_STOP
+

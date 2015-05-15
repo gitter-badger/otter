@@ -14,39 +14,4 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
-
-type token_credentials = Oauth.token_credentials
-
-type error_response = {
-  http_response_code: int;
-  error_msg: string;
-  error_code: int;
-} [@@deriving show,yojson]
-
-type user_ids = {
-  ids: int list;
-  next_cursor: int;
-  next_cursor_str: string;
-  previous_cursor: int;
-  previous_cursor_str: string
-} [@@deriving show, yojson]
-
-open Core_kernel.Std
-
-module type API = sig
-
-  module Get : sig
-
-    val get_follower : 
-      access_token : token_credentials ->
-      screen_name : string ->
-      ?count: int -> 
-      ?wait: bool ->
-      unit ->
-      (user_ids, error_response) Result.t Lwt_stream.t
-    
-  end
-
-end
-
-module Make_API (Client: Oauth.OAuth_client) : API
+include Api.API

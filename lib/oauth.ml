@@ -33,32 +33,6 @@ module type HMAC_SHA1 = sig
   val result : t -> string
 end
 
-module Clock : CLOCK = struct
-  let get_timestamp () = Unix.gettimeofday () |> Int.of_float |> string_of_int
-end
-
-module Random : RANDOM = struct
-  open Cryptokit
-  (* as suggested in Crypokit *)
-  let prng = Random.pseudo_rng (Random.string Random.secure_rng 20)
-
-  let get_nonce () =
-    let forbid = Re_posix.compile_pat "[^0-9a-zA-Z]" in
-    let s = Random.string prng 40 |> B64.encode in
-    Re.replace_string forbid ~by:"" s
-end
-
-module HMAC_SHA1 : HMAC_SHA1 = struct
-  open Cryptokit
-
-  type t = Cryptokit.hash
-
-  let init = MAC.hmac_sha1
-
-  let add_string hash s = hash#add_string s; hash
-
-  let result hash = hash#result
-end
 
 (** [credentials] are a pair of a token and a matching shared secret
     
@@ -92,47 +66,6 @@ type token_credentials = {
 } [@@deriving show]
 
 
-module type OAuth_client = sig
-  
-  (** Type of HTTP reponse error *)
-  type error = 
-    | HttpResponse of int * string (** HTTP response code *)
-    | Exception of exn (** HTTP Exception *)
-
-  (** [fetch_request_token], given [request_uri] *)
-  val fetch_request_token : 
-      ?callback : Uri.t ->
-      request_uri : Uri.t ->
-      authorization_uri : Uri.t ->
-      consumer_key : string ->
-      consumer_secret : string ->
-      unit ->
-      (temporary_credentials, error) Result.t Lwt.t
-  
-  val fetch_access_token :
-      access_uri : Uri.t ->
-      request_token : temporary_credentials ->
-      verifier : string ->
-      unit ->
-      (token_credentials, error) Result.t Lwt.t
-
-  val do_get_request :
-      ?uri_parameters : (string * string) list ->
-      ?expect : Cohttp.Code.status_code ->
-      uri : Uri.t ->
-      access_token : token_credentials ->
-      unit ->
-      (string, error) Result.t Lwt.t
-
-  val do_post_request :
-      ?uri_parameters : (string * string) list ->
-      ?body_parameters : (string * string) list ->
-      ?expect : Cohttp.Code.status_code ->
-      uri : Uri.t ->
-      access_token : token_credentials ->
-      unit ->
-      (string, error) Result.t Lwt.t
-end
 
 module type SIGNATURE = sig
   val add_signature : 
@@ -237,13 +170,55 @@ module Make_Signature
     Cohttp.Header.add headers "Authorization" (Buffer.contents buf)
 end
 
+module type OAuth_client = sig
+  
+  (** Type of HTTP reponse error *)
+  type oauth_error = 
+    | HttpResponse of int * string (** HTTP response code *)
+    | Exception of exn (** HTTP Exception *)
+
+  (** [fetch_request_token], given [request_uri] *)
+  val fetch_request_token : 
+      ?callback : Uri.t ->
+      request_uri : Uri.t ->
+      authorization_uri : Uri.t ->
+      consumer_key : string ->
+      consumer_secret : string ->
+      unit ->
+      (temporary_credentials, oauth_error) Result.t Lwt.t
+  
+  val fetch_access_token :
+      access_uri : Uri.t ->
+      request_token : temporary_credentials ->
+      verifier : string ->
+      unit ->
+      (token_credentials, oauth_error) Result.t Lwt.t
+
+  val do_get_request :
+      ?uri_parameters : (string * string) list ->
+      ?expect : Cohttp.Code.status_code ->
+      uri : Uri.t ->
+      access_token : token_credentials ->
+      unit ->
+      ((Cohttp.Header.t * string), oauth_error) Result.t Lwt.t
+
+  val do_post_request :
+      ?uri_parameters : (string * string) list ->
+      ?body_parameters : (string * string) list ->
+      ?expect : Cohttp.Code.status_code ->
+      uri : Uri.t ->
+      access_token : token_credentials ->
+      unit ->
+      ((Cohttp.Header.t * string), oauth_error) Result.t Lwt.t
+end
+
 module Make_OAuth_client 
   (Clock: CLOCK) 
   (Random: RANDOM)
   (HMAC_SHA1: HMAC_SHA1)
   (Client: Cohttp_lwt.Client) : OAuth_client = struct
 
-  type error =
+  type oauth_error =
     | HttpResponse of int * string
     | Exception of exn
 
@@ -361,7 +336,8 @@ module Make_OAuth_client
        | status -> Code.code_of_status status) |>
       (function 
        | c when c = (Code.code_of_status expect) ->
-          Body.to_string body >>= fun body_s -> return (Ok body_s)
+         Body.to_string body >>= fun body_s -> 
+         return (Ok (Response.headers resp, body_s))
        | c -> Body.to_string body >>= fun body_s ->
           return (Error (HttpResponse (c, body_s))))
 
@@ -403,9 +379,9 @@ module Make_OAuth_client
      |> 
      (function
       | c when c = (Code.code_of_status expect) -> Body.to_string body >>=
-        fun body_s -> return (Ok body_s)
+        fun body_s -> return (Ok ((Response.headers resp), body_s))
       | c -> Body.to_string body >>= fun body ->
         return (Error (HttpResponse (c, body))))
 end
 
-include Make_OAuth_client(Clock)(Random)(HMAC_SHA1)(Cohttp_lwt_unix.Client)
+

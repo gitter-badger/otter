@@ -48,7 +48,7 @@ type token_credentials = {
 module type OAuth_client = sig
   
   (** Type of HTTP reponse error *)
-  type error = 
+  type oauth_error = 
     | HttpResponse of int * string (** HTTP response code *)
     | Exception of exn (** HTTP Exception *)
 
@@ -61,7 +61,7 @@ module type OAuth_client = sig
       consumer_key : string ->
       consumer_secret : string ->
       unit ->
-      (temporary_credentials, error) Result.t Lwt.t
+      (temporary_credentials, oauth_error) Result.t Lwt.t
 
   (** [fetch_access_token], given [temporary_credentials], fetches
       the token credentials *)
@@ -70,7 +70,7 @@ module type OAuth_client = sig
       request_token : temporary_credentials ->
       verifier : string ->
       unit ->
-      (token_credentials, error) Result.t Lwt.t
+      (token_credentials, oauth_error) Result.t Lwt.t
 
   (** [do_get_request], given [access_token],
       performs a HTTP GET request *)
@@ -80,7 +80,7 @@ module type OAuth_client = sig
       uri : Uri.t ->
       access_token : token_credentials ->
       unit ->
-      (string, error) Result.t Lwt.t
+      ((Cohttp.Header.t * string), oauth_error) Result.t Lwt.t
 
   (** [do_post_request], given [access_token], 
       performs a HTTP POST request *)
@@ -91,7 +91,27 @@ module type OAuth_client = sig
       uri : Uri.t ->
       access_token : token_credentials ->
       unit ->
-      (string, error) Result.t Lwt.t
+      ((Cohttp.Header.t * string), oauth_error) Result.t Lwt.t
 end
 
-include OAuth_client
+module type CLOCK = sig
+  val get_timestamp : unit -> string
+end
+
+module type RANDOM = sig
+  val get_nonce : unit -> string
+end
+
+module type HMAC_SHA1 = sig
+  type t
+  val init : string -> t
+  val add_string: t -> string -> t
+  val result : t -> string
+end
+
+module Make_OAuth_client
+    (Clock: CLOCK)
+    (Random: RANDOM)
+    (HMAC_SHA1: HMAC_SHA1)
+    (Client:Cohttp_lwt.Client) : OAuth_client
+

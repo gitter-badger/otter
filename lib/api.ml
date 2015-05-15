@@ -109,49 +109,67 @@ type user_ids = {
 
 open Core_kernel.Std
 
-type token_credentials = Oauth_client.token_credentials
+type token_credentials = Oauth.token_credentials
 
-let process_error_exn e =
-  match e with
-  | Oauth_client.HttpResponse (c, b) -> begin
-      let json = Yojson.Basic.from_string b in
-      let open Yojson.Basic.Util in
-      let errors = json |> member "errors" |> to_list |> List.hd_exn in
-      { http_response_code = c;
-        error_msg = errors |> member "message" |> to_string;
-        error_code = errors |> member "code" |> to_int
-      }
-    end
-  | Oauth_client.Exception excep -> raise excep
+module type API = sig
 
-module Get = struct
+  module Get : sig
 
-  let get_follower ~access_token ~screen_name ?(count=5000) () = 
-    let base_uri = "https://api.twitter.com/1.1/followers/ids.json" in
-    let cursor = ref (-1) in
-    let f () =
-      if !cursor = 0 then return None else
-      Oauth_client.do_get_request
-        ~uri_parameters:
-          ["screen_name", screen_name;
-           "cursor", (Int.to_string (!cursor));
-           "count", (Int.to_string count)]
-        ~uri:(Uri.of_string base_uri)
-        ~access_token:access_token
-      () >>= fun res ->
-      match res with
-      | Ok str -> begin
-        match (Yojson.Safe.from_string str |> user_ids_of_yojson) with
-        | `Ok uids -> 
-          cursor := uids.next_cursor;
-          return (Some (Ok uids))
-        | `Error msg -> failwith msg 
-        end
-      | Error e -> return (Some (Error (process_error_exn e))) in
-    Lwt_stream.from f
+    val get_follower : 
+      access_token : token_credentials ->
+      screen_name : string ->
+      ?count: int -> 
+      ?wait: bool ->
+      unit ->
+      (user_ids, error_response) Result.t Lwt_stream.t
+    
+  end
 
 end
 
+module Make_API (Client: Oauth.OAuth_client) : API = struct
 
+  module Header = Cohttp.Header
+  
+  let process_error_exn e =
+    match e with
+    | Client.HttpResponse (c, b) -> begin
+        let json = Yojson.Basic.from_string b in
+        let open Yojson.Basic.Util in
+        let errors = json |> member "errors" |> to_list |> List.hd_exn in
+        { http_response_code = c;
+          error_msg = errors |> member "message" |> to_string;
+          error_code = errors |> member "code" |> to_int
+        }
+      end
+    | Client.Exception excep -> raise excep
 
+  module Get = struct
+
+    let get_follower ~access_token ~screen_name ?(count=5000) ?(wait=true) () =
+      let base_uri = "https://api.twitter.com/1.1/followers/ids.json" in
+      let cursor, rem_call, rem_time = ref@@ -1, ref 0, ref 0.0 in
+      let f () =
+        Client.do_get_request
+          ~uri_parameters:
+            ["screen_name", screen_name;
+             "cursor", (string_of_int (!cursor));
+             "count", (string_of_int count)]
+          ~uri:(Uri.of_string base_uri)
+          ~access_token:access_token
+        () >>= fun res ->
+        match res with
+        | Ok (header, str) -> begin
+          match (Yojson.Safe.from_string str |> user_ids_of_yojson) with
+          | `Ok uids -> 
+            cursor := uids.next_cursor;
+            return (Some (Ok uids))
+          | `Error msg -> failwith msg 
+          end
+        | Error e -> return (Some (Error (process_error_exn e))) in
+      Lwt_stream.from f
+
+  end
+
+end
 

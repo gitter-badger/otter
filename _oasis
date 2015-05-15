@@ -9,13 +9,28 @@ Homepage:    https://github.com/marklrh/otter
 Plugins:     META (0.4)
 BuildTools:  ocamlbuild
 
-Executable otter
+Library otter
   Path:       lib
-  MainIs:     otter.ml
+  Findlibname: otter
+  Pack: true
+  Modules: Api, Oauth
   BuildDepends: 
     lwt,core_kernel,cryptokit,cohttp,cohttp.lwt,
     uri,re,cohttp,base64,
     ppx_deriving.show,
     ppx_deriving_yojson
+
+Library otter_unix_lwt
+  Path: unix
+  Findlibname: unix_lwt
+  FindlibParent: otter
+  Modules: Oauth_unix, Api_unix
+  BuildDepends: otter, core_kernel
+  
+Executable "otter_example"
+  Path: bin
+  MainIs: otter_test.ml
+  Custom: true
   CompiledObject: best
   Install: false
+  BuildDepends: otter, otter.unix_lwt

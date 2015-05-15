@@ -14,39 +14,36 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
-
-type token_credentials = Oauth.token_credentials
-
-type error_response = {
-  http_response_code: int;
-  error_msg: string;
-  error_code: int;
-} [@@deriving show,yojson]
-
-type user_ids = {
-  ids: int list;
-  next_cursor: int;
-  next_cursor_str: string;
-  previous_cursor: int;
-  previous_cursor_str: string
-} [@@deriving show, yojson]
-
 open Core_kernel.Std
 
-module type API = sig
-
-  module Get : sig
-
-    val get_follower : 
-      access_token : token_credentials ->
-      screen_name : string ->
-      ?count: int -> 
-      ?wait: bool ->
-      unit ->
-      (user_ids, error_response) Result.t Lwt_stream.t
-    
-  end
-
+module Clock_unix : Oauth.CLOCK = struct
+  let get_timestamp () = Unix.gettimeofday () |> Int.of_float |> string_of_int
 end
 
-module Make_API (Client: Oauth.OAuth_client) : API
+module Random_unix : Oauth.RANDOM = struct
+  open Cryptokit
+  (* as suggested in Crypokit *)
+  let prng = Random.pseudo_rng (Random.string Random.secure_rng 20)
+
+  let get_nonce () =
+    let forbid = Re_posix.compile_pat "[^0-9a-zA-Z]" in
+    let s = Random.string prng 40 |> B64.encode in
+    Re.replace_string forbid ~by:"" s
+end
+
+module HMAC_SHA1_unix : Oauth.HMAC_SHA1 = struct
+  open Cryptokit
+
+  type t = Cryptokit.hash
+
+  let init = MAC.hmac_sha1
+
+  let add_string hash s = hash#add_string s; hash
+
+  let result hash = hash#result
+end
+
+
+module Client = 
+  Oauth.Make_OAuth_client
+  (Clock_unix)(Random_unix)(HMAC_SHA1_unix)(Cohttp_lwt_unix.Client)
