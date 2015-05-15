@@ -12,3 +12,6 @@ PKG cohttp.lwt
 PKG uri
 PKG re 
 PKG base64
+PKG yojson
+PKG ppx_deriving.show
+PKG ppx_deriving_yojson

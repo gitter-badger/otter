@@ -80,8 +80,8 @@ type temporary_credentials = {
   token : string;
   token_secret : string;
   callback_confirmed : bool;
-  authorization_uri : Uri.t
-}
+  authorization_uri : string;
+} [@@deriving show]
   
   (** Token credentials *)
 type token_credentials = {
@@ -89,7 +89,7 @@ type token_credentials = {
   consumer_secret : string;
   token : string;
   token_secret : string;
-}
+} [@@deriving show]
 
 
 module type OAuth_client = sig
@@ -99,8 +99,6 @@ module type OAuth_client = sig
     | HttpResponse of int * string (** HTTP response code *)
     | Exception of exn (** HTTP Exception *)
 
-  val print_authorization_uri : temporary_credentials -> unit
-  
   (** [fetch_request_token], given [request_uri] *)
   val fetch_request_token : 
       ?callback : Uri.t ->
@@ -256,9 +254,6 @@ module Make_OAuth_client
   module Body = Cohttp_lwt_body
   module Header = Cohttp.Header
   module Response = Client.Response
-
-  let print_authorization_uri (tc:temporary_credentials) =
-    Printf.printf "authorization_uri: %s\n" (Uri.to_string tc.authorization_uri)
     
   let fetch_request_token
     ?callback:(callback: Uri.t option)
@@ -298,7 +293,7 @@ module Make_OAuth_client
                  find "oauth_callback_confirmed" |> Bool.of_string;
                authorization_uri = 
                  Uri.add_query_param' 
-                  authorization_uri ("oauth_token", token);
+                  authorization_uri ("oauth_token", token) |> Uri.to_string
              })
            with _ as e -> Error(Exception e))
       | c -> Body.to_string body >>= fun b -> 

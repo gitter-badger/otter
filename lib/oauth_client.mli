@@ -17,25 +17,6 @@
 
 open Core_kernel.Std
 
-module type CLOCK = sig
-  val get_timestamp : unit -> string
-end
-
-module type RANDOM = sig
-  val get_nonce : unit -> string
-end
-
-module type HMAC_SHA1 = sig
-  type t
-  val init : string -> t
-  val add_string: t -> string -> t
-  val result : t -> string
-end
-
-module Clock : CLOCK
-module Random : RANDOM
-module HMAC_SHA1 : HMAC_SHA1
-
 (** credential is a pair of a token and a matching shared secret
       
     Token is a unique identifier issued by the server and
@@ -53,15 +34,15 @@ type temporary_credentials = {
   token : string;
   token_secret : string;
   callback_confirmed : bool;
-  authorization_uri : Uri.t
-}
+  authorization_uri : string;
+} 
   
 type token_credentials = {
   consumer_key : string;
   consumer_secret : string;
   token : string;
   token_secret : string;
-}
+} [@@deriving show]
 
 (** Interface of OAuth v1.0 client *)
 module type OAuth_client = sig
@@ -71,9 +52,8 @@ module type OAuth_client = sig
     | HttpResponse of int * string (** HTTP response code *)
     | Exception of exn (** HTTP Exception *)
 
-  val print_authorization_uri : temporary_credentials -> unit
-
-  (** [fetch_request_token], given [request_uri] *)
+  (** [fetch_request_token], given [request_uri], fetches
+      the temperary crendentials *)
   val fetch_request_token : 
       ?callback : Uri.t ->
       request_uri : Uri.t ->
@@ -82,14 +62,18 @@ module type OAuth_client = sig
       consumer_secret : string ->
       unit ->
       (temporary_credentials, error) Result.t Lwt.t
-  
+
+  (** [fetch_access_token], given [temporary_credentials], fetches
+      the token credentials *)
   val fetch_access_token :
       access_uri : Uri.t ->
       request_token : temporary_credentials ->
       verifier : string ->
       unit ->
       (token_credentials, error) Result.t Lwt.t
-  
+
+  (** [do_get_request], given [access_token],
+      performs a HTTP GET request *)
   val do_get_request :
       ?uri_parameters : (string * string) list ->
       ?expect : Cohttp.Code.status_code ->
@@ -98,6 +82,8 @@ module type OAuth_client = sig
       unit ->
       (string, error) Result.t Lwt.t
 
+  (** [do_post_request], given [access_token], 
+      performs a HTTP POST request *)
   val do_post_request :
       ?uri_parameters : (string * string) list ->
       ?body_parameters : (string * string) list ->
@@ -107,12 +93,5 @@ module type OAuth_client = sig
       unit ->
       (string, error) Result.t Lwt.t
 end
-
-
-module Make_OAuth_client 
-  (Clock: CLOCK) 
-  (Random: RANDOM)
-  (HMAC_SHA1: HMAC_SHA1)
-  (Client: Cohttp_lwt.Client) : OAuth_client
 
 include OAuth_client

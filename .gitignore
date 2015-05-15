@@ -28,3 +28,5 @@ setup.bin
 *.txt
 
 *.swp
+
+*.json

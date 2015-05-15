@@ -15,8 +15,9 @@
  *)
 
 open Lwt
+open Yojson
 
-module API_code = struct
+module API_error_code = struct
 
   (** Please refer to https://dev.twitter.com/overview/api/response-codes *)
   type t =
@@ -92,32 +93,65 @@ module API_code = struct
 
 end
 
+type error_response = {
+  http_response_code: int;
+  error_msg: string;
+  error_code: int;
+} [@@deriving show,yojson]
+
 type user_ids = {
   ids: int list;
   next_cursor: int;
+  next_cursor_str: string;
   previous_cursor: int;
-} [@@deriving show, yojson]
+  previous_cursor_str: string
+} [@@deriving show,yojson]
 
 open Core_kernel.Std
 
-
-
 type token_credentials = Oauth_client.token_credentials
+
+let process_error_exn e =
+  match e with
+  | Oauth_client.HttpResponse (c, b) -> begin
+      let json = Yojson.Basic.from_string b in
+      let open Yojson.Basic.Util in
+      let errors = json |> member "errors" |> to_list |> List.hd_exn in
+      { http_response_code = c;
+        error_msg = errors |> member "message" |> to_string;
+        error_code = errors |> member "code" |> to_int
+      }
+    end
+  | Oauth_client.Exception excep -> raise excep
 
 module Get = struct
 
-  let get_follower ~access_token ~screen_name () = 
+  let get_follower ~access_token ~screen_name ?(count=5000) () = 
     let base_uri = "https://api.twitter.com/1.1/followers/ids.json" in
-    Oauth_client.do_get_request
-      ~uri_parameters:["screen_name",screen_name;"cursor","-1";"count","5000"]
-      ~uri:(Uri.of_string base_uri)
-      ~access_token:access_token
+    let cursor = ref (-1) in
+    let f () =
+      if !cursor = 0 then return None else
+      Oauth_client.do_get_request
+        ~uri_parameters:
+          ["screen_name", screen_name;
+           "cursor", (Int.to_string (!cursor));
+           "count", (Int.to_string count)]
+        ~uri:(Uri.of_string base_uri)
+        ~access_token:access_token
       () >>= fun res ->
-    match res with
-    | Ok str -> print_endline str; return ()
-    | Error e ->
-      match e with
-      | Oauth_client.HttpResponse (i, s) -> 
-        Printf.printf "%d %s\n" i s; return ()
-      | _ -> assert false
+      match res with
+      | Ok str -> begin
+        match (Yojson.Safe.from_string str |> user_ids_of_yojson) with
+        | `Ok uids -> 
+          cursor := uids.next_cursor;
+          return (Some (Ok uids))
+        | `Error msg -> failwith msg 
+        end
+      | Error e -> return (Some (Error (process_error_exn e))) in
+    Lwt_stream.from f
+
 end
+
+
+
+
