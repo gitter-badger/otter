@@ -15,7 +15,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
-open Core_kernel.Std
 open Lwt
 
 module type CLOCK = sig
@@ -65,8 +64,6 @@ type token_credentials = {
   token_secret : string;
 } [@@deriving show]
 
-
-
 module type SIGNATURE = sig
   val add_signature : 
     ?body_parameters : (string * string) list ->
@@ -84,7 +81,7 @@ end
 module Util = struct
   let pct_encode src = 
     let dst = String.length src |> Buffer.create in
-    String.iter ~f:(function 
+    String.iter (function
       | c when 
         (c >= '0' && c <= '9') 
         || (c >= 'A' && c <= 'Z')
@@ -93,7 +90,7 @@ module Util = struct
         || c = '.'
         || c = '_'
         || c = '~' -> Buffer.add_char dst c
-      | c -> Char.to_int c |>
+      | c -> int_of_char c |>
         Printf.sprintf "%%%02X" |>
         Buffer.add_string dst) src; 
     Buffer.contents dst
@@ -130,8 +127,8 @@ module Make_Signature
           | Some token -> ["oauth_token", token]
           | None -> []) 
     in
-    let uri_without_query = List.fold_left ~init:uri 
-        ~f:(fun acc (e, _) -> Uri.remove_query_param acc e) (Uri.query uri) 
+    let uri_without_query = List.fold_left
+        (fun acc (e, _) -> Uri.remove_query_param acc e) uri (Uri.query uri) 
     in
     let (|+) = HMAC_SHA1.add_string in
     let hmac = (Util.pct_encode consumer_secret) ^ 
@@ -142,25 +139,24 @@ module Make_Signature
       fun hmac -> 
         let quries = Uri.query uri in
         let fold_f acc (k, vs) =
-          match (List.hd vs) with
-          | None -> List.append acc [k, ""]
-          | _ -> List.map vs ~f:(fun v -> (k, v)) |> List.append acc in
-        List.fold quries ~init:parameters ~f:fold_f |>
+          if vs = [] then List.append acc [k, ""] else
+          List.map (fun v -> (k, v)) vs |> List.append acc in
+        List.fold_left fold_f parameters quries|>
         List.append oauth_params |>
-        List.map ~f:(fun (k, v) -> (Util.pct_encode k, Util.pct_encode v)) |>
+        List.map (fun (k, v) -> (Util.pct_encode k, Util.pct_encode v)) |>
         (* bug fixed: values should be compared when keys are the same *)
-        List.sort ~cmp:(fun kv1 kv2 -> compare kv1 kv2) |> 
-        List.foldi ~init:hmac ~f:(fun i hmac (key, value) ->
-          hmac |+
+        List.sort (fun kv1 kv2 -> compare kv1 kv2) |> 
+        List.fold_left (fun (hmac, i) (key, value) ->
+          (hmac |+
           (match i with | 0 -> "" | _ -> Util.pct_encode "&") |+
-          key |+ (Util.pct_encode "=") |+ value)
+          key |+ (Util.pct_encode "=") |+ value), i + 1) (hmac, 0) |> fst
     in
     let buf = Buffer.create 16 in
     let buf_add = Buffer.add_string buf in
     buf_add "OAuth oauth_signature=\"";
     HMAC_SHA1.result hmac |> B64.encode |> Util.pct_encode |> buf_add;
     buf_add "\"";
-    List.iter ~f:(fun (key, value) ->
+    List.iter (fun (key, value) ->
         buf_add ",";
         buf_add key;
         buf_add "=\"";
@@ -185,14 +181,14 @@ module type OAuth_client = sig
       consumer_key : string ->
       consumer_secret : string ->
       unit ->
-      (temporary_credentials, oauth_error) Result.t Lwt.t
+      [> `Ok of temporary_credentials | `Error of oauth_error] Lwt.t
   
   val fetch_access_token :
       access_uri : Uri.t ->
       request_token : temporary_credentials ->
       verifier : string ->
       unit ->
-      (token_credentials, oauth_error) Result.t Lwt.t
+      [> `Ok of token_credentials | `Error of oauth_error] Lwt.t
 
   val do_get_request :
       ?uri_parameters : (string * string) list ->
@@ -200,7 +196,7 @@ module type OAuth_client = sig
       uri : Uri.t ->
       access_token : token_credentials ->
       unit ->
-      ((Cohttp.Header.t * string), oauth_error) Result.t Lwt.t
+      [> `Ok of (Cohttp.Header.t * string) | `Error of oauth_error] Lwt.t
 
   val do_post_request :
       ?uri_parameters : (string * string) list ->
@@ -209,7 +205,7 @@ module type OAuth_client = sig
       uri : Uri.t ->
       access_token : token_credentials ->
       unit ->
-      ((Cohttp.Header.t * string), oauth_error) Result.t Lwt.t
+      [> `Ok of (Cohttp.Header.t * string) | `Error of oauth_error] Lwt.t
 end
 
 module Make_OAuth_client 
@@ -252,27 +248,27 @@ module Make_OAuth_client
     (function
       | 200 -> Body.to_string body >>= fun body_s ->
          let find key = 
-           List.Assoc.find_exn (Uri.query_of_encoded body_s) key 
-            |> List.hd_exn 
+           List.assoc key (Uri.query_of_encoded body_s)
+            |> List.hd 
          in
          return (
            let token = find "oauth_token" in
            try
-             Ok ({
+             `Ok ({
                consumer_key = consumer_key;
                consumer_secret = consumer_secret;
                token = token;
                token_secret = 
                  find "oauth_token_secret";
                callback_confirmed = 
-                 find "oauth_callback_confirmed" |> Bool.of_string;
+                 find "oauth_callback_confirmed" |> bool_of_string;
                authorization_uri = 
                  Uri.add_query_param' 
                   authorization_uri ("oauth_token", token) |> Uri.to_string
              })
-           with _ as e -> Error(Exception e))
+           with _ as e -> `Error (Exception e))
       | c -> Body.to_string body >>= fun b -> 
-        return (Error(HttpResponse (c, b)))))
+        return (`Error (HttpResponse (c, b)))))
 
   let fetch_access_token 
     ~access_uri 
@@ -298,20 +294,19 @@ module Make_OAuth_client
       (function
        | 200 -> Body.to_string body >>= fun body_s ->
          let find k = 
-           List.Assoc.find_exn (Uri.query_of_encoded body_s) k 
-           |> List.hd_exn in
+           List.assoc k (Uri.query_of_encoded body_s) |> List.hd in
          return (
            try 
-             Ok({
+             `Ok({
                consumer_key = request_token.consumer_key;
                consumer_secret = request_token.consumer_secret;
                token = find "oauth_token";
                token_secret = find "oauth_token_secret";
              })
-           with _ as e -> Error(Exception e)
+           with _ as e -> `Error(Exception e)
          )
        | c -> Body.to_string body >>= fun b -> 
-         return (Error (HttpResponse (c, b))))
+         return (`Error (HttpResponse (c, b))))
 
   let do_get_request 
     ?uri_parameters: (uri_parameters: (string * string) list = [])
@@ -337,9 +332,9 @@ module Make_OAuth_client
       (function 
        | c when c = (Code.code_of_status expect) ->
          Body.to_string body >>= fun body_s -> 
-         return (Ok (Response.headers resp, body_s))
+         return (`Ok (Response.headers resp, body_s))
        | c -> Body.to_string body >>= fun body_s ->
-          return (Error (HttpResponse (c, body_s))))
+          return (`Error (HttpResponse (c, body_s))))
 
   let do_post_request
     ?uri_parameters: (uri_parameters: (string * string) list = [])
@@ -350,7 +345,7 @@ module Make_OAuth_client
     () =
     let uri_with_query = Uri.add_query_params' uri uri_parameters in
     let encoded_bp = body_parameters |>
-      List.map ~f:(fun (k, v) -> (k, Util.pct_encode v)) in
+      List.map (fun (k, v) -> (k, Util.pct_encode v)) in
     let header = Sign.add_signature
       ~body_parameters: encoded_bp
       ~token: access_token.token
@@ -363,7 +358,7 @@ module Make_OAuth_client
     in
     let body =
       let buf = Buffer.create 16 in
-      List.iteri ~f:(fun i (k, v) ->
+      List.iteri (fun i (k, v) ->
         (match i with | 0 -> () | _ -> Buffer.add_char buf '&';
         Buffer.add_string buf (Util.pct_encode k);
         Buffer.add_char buf '=';
@@ -379,9 +374,9 @@ module Make_OAuth_client
      |> 
      (function
       | c when c = (Code.code_of_status expect) -> Body.to_string body >>=
-        fun body_s -> return (Ok ((Response.headers resp), body_s))
+        fun body_s -> return (`Ok ((Response.headers resp), body_s))
       | c -> Body.to_string body >>= fun body ->
-        return (Error (HttpResponse (c, body))))
+        return (`Error (HttpResponse (c, body))))
 end
 
 

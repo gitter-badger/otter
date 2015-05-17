@@ -15,7 +15,7 @@ Library otter
   Pack: true
   Modules: Api, Oauth
   BuildDepends: 
-    lwt,core_kernel,cryptokit,cohttp,cohttp.lwt,
+    lwt,cryptokit,cohttp,cohttp.lwt,
     uri,re,cohttp,base64,
     ppx_deriving.show,
     ppx_deriving_yojson
@@ -25,7 +25,7 @@ Library otter_unix_lwt
   Findlibname: unix_lwt
   FindlibParent: otter
   Modules: Oauth_unix, Api_unix
-  BuildDepends: otter, core_kernel
+  BuildDepends: otter
   
 Executable "otter_example"
   Path: bin

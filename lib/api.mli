@@ -31,8 +31,6 @@ type user_ids = {
   previous_cursor_str: string
 } [@@deriving show, yojson]
 
-open Core_kernel.Std
-
 module type API = sig
 
   module Get : sig
@@ -43,7 +41,7 @@ module type API = sig
       ?count: int -> 
       ?wait: bool ->
       unit ->
-      (user_ids, error_response) Result.t Lwt_stream.t
+      [> `Ok of user_ids | `Error of error_response] Lwt_stream.t
     
   end
 

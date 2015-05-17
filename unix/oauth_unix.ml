@@ -14,10 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
-open Core_kernel.Std
-
 module Clock_unix : Oauth.CLOCK = struct
-  let get_timestamp () = Unix.gettimeofday () |> Int.of_float |> string_of_int
+  let get_timestamp () = Unix.gettimeofday () |> int_of_float |> string_of_int
 end
 
 module Random_unix : Oauth.RANDOM = struct

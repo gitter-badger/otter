@@ -9,7 +9,6 @@ S lib_test/
 S bin/
 
 PKG lwt
-PKG core
 PKG cryptokit
 PKG cohttp
 PKG cohttp.lwt

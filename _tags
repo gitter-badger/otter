@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: f23532f3b73ef1d5248a86f5be9c5d95)
+# DO NOT EDIT (digest: 552f25157cafc5aff0c9b580959990c4)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -21,7 +21,6 @@ true: annot, bin_annot
 <lib/*.ml{,i,y}>: pkg_base64
 <lib/*.ml{,i,y}>: pkg_cohttp
 <lib/*.ml{,i,y}>: pkg_cohttp.lwt
-<lib/*.ml{,i,y}>: pkg_core_kernel
 <lib/*.ml{,i,y}>: pkg_cryptokit
 <lib/*.ml{,i,y}>: pkg_lwt
 <lib/*.ml{,i,y}>: pkg_ppx_deriving.show
@@ -33,7 +32,6 @@ true: annot, bin_annot
 <unix/*.ml{,i,y}>: pkg_base64
 <unix/*.ml{,i,y}>: pkg_cohttp
 <unix/*.ml{,i,y}>: pkg_cohttp.lwt
-<unix/*.ml{,i,y}>: pkg_core_kernel
 <unix/*.ml{,i,y}>: pkg_cryptokit
 <unix/*.ml{,i,y}>: pkg_lwt
 <unix/*.ml{,i,y}>: pkg_ppx_deriving.show
@@ -45,7 +43,6 @@ true: annot, bin_annot
 <bin/otter_test.{native,byte}>: pkg_base64
 <bin/otter_test.{native,byte}>: pkg_cohttp
 <bin/otter_test.{native,byte}>: pkg_cohttp.lwt
-<bin/otter_test.{native,byte}>: pkg_core_kernel
 <bin/otter_test.{native,byte}>: pkg_cryptokit
 <bin/otter_test.{native,byte}>: pkg_lwt
 <bin/otter_test.{native,byte}>: pkg_ppx_deriving.show
@@ -57,7 +54,6 @@ true: annot, bin_annot
 <bin/*.ml{,i,y}>: pkg_base64
 <bin/*.ml{,i,y}>: pkg_cohttp
 <bin/*.ml{,i,y}>: pkg_cohttp.lwt
-<bin/*.ml{,i,y}>: pkg_core_kernel
 <bin/*.ml{,i,y}>: pkg_cryptokit
 <bin/*.ml{,i,y}>: pkg_lwt
 <bin/*.ml{,i,y}>: pkg_ppx_deriving.show

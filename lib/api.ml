@@ -107,8 +107,6 @@ type user_ids = {
   previous_cursor_str: string
 } [@@deriving show,yojson]
 
-open Core_kernel.Std
-
 type token_credentials = Oauth.token_credentials
 
 module type API = sig
@@ -121,7 +119,7 @@ module type API = sig
       ?count: int -> 
       ?wait: bool ->
       unit ->
-      (user_ids, error_response) Result.t Lwt_stream.t
+      [> `Ok of user_ids | `Error of error_response] Lwt_stream.t
     
   end
 
@@ -136,7 +134,7 @@ module Make_API (Client: Oauth.OAuth_client) : API = struct
     | Client.HttpResponse (c, b) -> begin
         let json = Yojson.Basic.from_string b in
         let open Yojson.Basic.Util in
-        let errors = json |> member "errors" |> to_list |> List.hd_exn in
+        let errors = json |> member "errors" |> to_list |> List.hd in
         { http_response_code = c;
           error_msg = errors |> member "message" |> to_string;
           error_code = errors |> member "code" |> to_int
@@ -148,8 +146,10 @@ module Make_API (Client: Oauth.OAuth_client) : API = struct
 
     let get_follower ~access_token ~screen_name ?(count=5000) ?(wait=true) () =
       let base_uri = "https://api.twitter.com/1.1/followers/ids.json" in
-      let cursor, rem_call, rem_time = ref@@ -1, ref 0, ref 0.0 in
+      let cursor = ref (-1) in
       let f () =
+        print_endline "api call";
+        if !cursor = 0 then return None else
         Client.do_get_request
           ~uri_parameters:
             ["screen_name", screen_name;
@@ -159,16 +159,15 @@ module Make_API (Client: Oauth.OAuth_client) : API = struct
           ~access_token:access_token
         () >>= fun res ->
         match res with
-        | Ok (header, str) -> begin
-          match (Yojson.Safe.from_string str |> user_ids_of_yojson) with
+        | `Ok (h, b_str) -> begin
+          match (Yojson.Safe.from_string b_str |> user_ids_of_yojson) with
           | `Ok uids -> 
             cursor := uids.next_cursor;
-            return (Some (Ok uids))
+            return (Some (`Ok uids))
           | `Error msg -> failwith msg 
           end
-        | Error e -> return (Some (Error (process_error_exn e))) in
+        | `Error e -> return (Some (`Error (process_error_exn e))) in
       Lwt_stream.from f
-
   end
 
 end

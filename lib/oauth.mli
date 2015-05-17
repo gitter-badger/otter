@@ -15,8 +15,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
-open Core_kernel.Std
-
 (** credential is a pair of a token and a matching shared secret
       
     Token is a unique identifier issued by the server and
@@ -61,7 +59,7 @@ module type OAuth_client = sig
       consumer_key : string ->
       consumer_secret : string ->
       unit ->
-      (temporary_credentials, oauth_error) Result.t Lwt.t
+      [> `Ok of temporary_credentials | `Error of oauth_error] Lwt.t
 
   (** [fetch_access_token], given [temporary_credentials], fetches
       the token credentials *)
@@ -70,7 +68,7 @@ module type OAuth_client = sig
       request_token : temporary_credentials ->
       verifier : string ->
       unit ->
-      (token_credentials, oauth_error) Result.t Lwt.t
+      [> `Ok of token_credentials | `Error of oauth_error] Lwt.t
 
   (** [do_get_request], given [access_token],
       performs a HTTP GET request *)
@@ -80,7 +78,7 @@ module type OAuth_client = sig
       uri : Uri.t ->
       access_token : token_credentials ->
       unit ->
-      ((Cohttp.Header.t * string), oauth_error) Result.t Lwt.t
+      [> `Ok of (Cohttp.Header.t * string) | `Error of oauth_error] Lwt.t
 
   (** [do_post_request], given [access_token], 
       performs a HTTP POST request *)
@@ -91,7 +89,7 @@ module type OAuth_client = sig
       uri : Uri.t ->
       access_token : token_credentials ->
       unit ->
-      ((Cohttp.Header.t * string), oauth_error) Result.t Lwt.t
+      [> `Ok of (Cohttp.Header.t * string) | `Error of oauth_error] Lwt.t
 end
 
 module type CLOCK = sig
