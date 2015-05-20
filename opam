@@ -1,0 +1,31 @@
+opam-version: "1.2"
+
+name: "otter"
+maintainer: "marklrh@gmail.com"
+version: "0.1"
+authors: [ "Runhang Li"
+           "Rudi Grinberg" ]
+
+license: "GPL"
+homepage: "https://github.com/marklrh/otter"
+bug-reports: "https://github.com/marklrh/otter"
+
+build: [
+  [make "PREFIX=%{prefix}%" build]
+]
+
+remove: [["ocamlfind" "remove" "otter"]]
+
+depends: [
+  "lwt"
+  "ocamlfind" {build}
+  "cryptokit" {>= "1.9"}
+  "cohttp"
+  "uri"
+  "re"
+  "base64"
+  "ppx_deriving"
+  "ppx_deriving_yojson"
+]
+
+available: [ocaml-version >= "4.02.0"]
