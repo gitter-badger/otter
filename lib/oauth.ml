@@ -208,11 +208,28 @@ module type OAuth_client = sig
       [> `Ok of (Cohttp.Header.t * string) | `Error of oauth_error] Lwt.t
 end
 
+module type Client = sig
+  val post :
+    ?ctx:Cohttp_lwt_unix.Client.ctx ->
+    ?body:Cohttp_lwt_body.t ->
+    ?chunked:bool ->
+    ?headers:Cohttp.Header.t ->
+    Uri.t -> (Cohttp_lwt_unix.Client.Response.t * Cohttp_lwt_body.t) Lwt.t
+
+  val get :
+    ?ctx:Cohttp_lwt_unix.Client.ctx ->
+    ?headers:Cohttp.Header.t ->
+    Uri.t -> (Cohttp_lwt_unix.Client.Response.t * Cohttp_lwt_body.t) Lwt.t
+end
+
 module Make_OAuth_client 
   (Clock: CLOCK) 
   (Random: RANDOM)
   (HMAC_SHA1: HMAC_SHA1)
-  (Client: Cohttp_lwt.Client) : OAuth_client = struct
+  (Client: Client) : OAuth_client = struct
+
+  open Cohttp
+  module Body = Cohttp_lwt_body
 
   type oauth_error =
     | HttpResponse of int * string
@@ -221,11 +238,7 @@ module Make_OAuth_client
   exception Authorization_failed of int * string
 
   module Sign = Make_Signature(Clock)(Random)(HMAC_SHA1)
-  module Code = Cohttp.Code
-  module Body = Cohttp_lwt_body
-  module Header = Cohttp.Header
-  module Response = Client.Response
-    
+
   let fetch_request_token
     ?callback:(callback: Uri.t option)
     ~request_uri

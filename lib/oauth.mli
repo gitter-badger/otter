@@ -107,9 +107,23 @@ module type HMAC_SHA1 = sig
   val result : t -> string
 end
 
+module type Client = sig
+  val post :
+    ?ctx:Cohttp_lwt_unix.Client.ctx ->
+    ?body:Cohttp_lwt_body.t ->
+    ?chunked:bool ->
+    ?headers:Cohttp.Header.t ->
+    Uri.t -> (Cohttp_lwt_unix.Client.Response.t * Cohttp_lwt_body.t) Lwt.t
+
+  val get :
+    ?ctx:Cohttp_lwt_unix.Client.ctx ->
+    ?headers:Cohttp.Header.t ->
+    Uri.t -> (Cohttp_lwt_unix.Client.Response.t * Cohttp_lwt_body.t) Lwt.t
+end
+
 module Make_OAuth_client
     (Clock: CLOCK)
     (Random: RANDOM)
     (HMAC_SHA1: HMAC_SHA1)
-    (Client:Cohttp_lwt.Client) : OAuth_client
+    (Client:Client) : OAuth_client
 
