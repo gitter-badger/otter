@@ -3,7 +3,7 @@ Name:        otter
 Version:     0.1
 Synopsis:    OCaml Twitter API
 Authors:     Runhang Li, Dominic Price
-License:     MIT
+License:     ISC
 Maintainers: Runhang Li <marklrh@gmail.com>
 Homepage:    https://github.com/marklrh/otter
 Plugins:     META (0.4)

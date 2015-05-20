@@ -6,13 +6,15 @@ version: "0.1"
 authors: [ "Runhang Li"
            "Rudi Grinberg" ]
 
-license: "GPL"
+license: "ISC"
 homepage: "https://github.com/marklrh/otter"
 bug-reports: "https://github.com/marklrh/otter"
 
 build: [
-  [make "PREFIX=%{prefix}%" build]
+  [make "build"]
 ]
+
+install: [make "install"]
 
 remove: [["ocamlfind" "remove" "otter"]]
 
